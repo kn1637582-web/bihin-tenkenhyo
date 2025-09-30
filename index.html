@@ -37,9 +37,10 @@
         </main>
 
         <footer class="mt-6">
-            <button id="submit-button" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition duration-300 ease-in-out disabled:bg-gray-400" disabled>
-                点検結果をCSVでダウンロード
+            <button id="submit-button" class="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition duration-300 ease-in-out disabled:bg-gray-400" disabled>
+                点検結果を送信
             </button>
+            <p id="status-message" class="text-center mt-2 text-sm"></p>
         </footer>
     </div>
 
@@ -49,8 +50,13 @@
             const itemListEl = document.getElementById('item-list');
             const loaderEl = document.getElementById('loader');
             const submitButton = document.getElementById('submit-button');
+            const statusMessageEl = document.getElementById('status-message');
 
-            // 1. URLから場所コードを取得
+            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            // ★★★ ここに、Google Apps Scriptで生成されたURLを貼り付け ★★★
+            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            const apiUrl = "https://script.google.com/macros/s/AKfycbx5sJjBCFzuzxbryOmrEpEHj87ADZC_aMTUUB9vYVKYhPokhemTkczNDnb4uXqB8e10/exec";
+
             const params = new URLSearchParams(window.location.search);
             const locationCode = params.get('location');
 
@@ -60,12 +66,10 @@
             }
 
             try {
-                // 2. Webサーバーに置いた備品データを読み込む
                 const response = await fetch('data.json');
                 if (!response.ok) throw new Error('データファイルの読み込みに失敗しました。');
                 const allItems = await response.json();
                 
-                // 3. この場所の備品だけを絞り込む
                 const locationItems = allItems.filter(item => String(item.場所コード) === String(locationCode));
 
                 if (locationItems.length === 0) {
@@ -75,11 +79,9 @@
                     return;
                 }
                 
-                // 場所名を表示 (最初の備品の場所名を利用)
                 locationNameEl.textContent = `場所: ${locationItems[0].場所 || `コード ${locationCode}`}`;
                 
-                // 4. 備品リストを画面に表示する
-                itemListEl.innerHTML = ''; // ローダーを消す
+                itemListEl.innerHTML = '';
                 locationItems.forEach(item => {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'bg-white p-4 rounded-lg shadow-md item-card';
@@ -88,51 +90,45 @@
                     itemDiv.dataset.location_code = item.場所コード;
 
                     itemDiv.innerHTML = `
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <h3 class="font-bold text-lg">${item.品名 || '名称未設定'}</h3>
-                                <p class="text-sm text-gray-500">ID: ${item.ID}</p>
-                            </div>
-                            <div class="flex items-center space-x-3">
-                                <label class="flex items-center space-x-1">
-                                    <span class="text-gray-700">現物:</span>
-                                    <select class="rounded border-gray-300 shadow-sm genbutsu-select">
-                                        <option value="有">有</option>
-                                        <option value="無">無</option>
-                                    </select>
-                                </label>
-                            </div>
+                        <div>
+                            <h3 class="font-bold text-lg">${item.品名 || '名称未設定'} (ID: ${item.ID})</h3>
                         </div>
-                        <div class="mt-3 space-y-2">
-                             <div class="flex items-center space-x-3">
-                                <label class="flex items-center space-x-1">
-                                    <span class="text-gray-700">状態:</span>
-                                    <select class="rounded border-gray-300 shadow-sm joutai-select">
-                                        <option value="正常">正常</option>
-                                        <option value="不備・破損">不備・破損</option>
-                                    </select>
-                                </label>
-                                <label class="flex items-center space-x-1 hope-field" style="display: none;">
-                                    <span class="text-gray-700">事後対応:</span>
-                                    <select class="rounded border-gray-300 shadow-sm jigo-select">
-                                        <option value=""></option>
-                                        <option value="修繕希望">修繕希望</option>
-                                        <option value="廃棄希望">廃棄希望</option>
-                                    </select>
-                                </label>
-                            </div>
+                        <div class="mt-3 grid grid-cols-2 gap-4">
+                            <label class="flex items-center space-x-2">
+                                <span class="text-gray-700 w-16">現物:</span>
+                                <select class="flex-1 rounded border-gray-300 shadow-sm genbutsu-select">
+                                    <option value="有" selected>有</option>
+                                    <option value="無">無</option>
+                                </select>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <span class="text-gray-700 w-16">状態:</span>
+                                <select class="flex-1 rounded border-gray-300 shadow-sm joutai-select">
+                                    <option value="正常" selected>正常</option>
+                                    <option value="不備・破損">不備・破損</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div class="mt-2 hope-field" style="display: none;">
+                             <label class="flex items-center space-x-2">
+                                <span class="text-gray-700 w-16">事後対応:</span>
+                                <select class="flex-1 rounded border-gray-300 shadow-sm jigo-select">
+                                    <option value=""></option>
+                                    <option value="修繕希望">修繕希望</option>
+                                    <option value="廃棄希望">廃棄希望</option>
+                                </select>
+                            </label>
                         </div>
                     `;
                     itemListEl.appendChild(itemDiv);
                 });
 
-                // 状態が「不備・破損」の時だけ事後対応欄を表示する
                 itemListEl.querySelectorAll('.joutai-select').forEach(select => {
                     select.addEventListener('change', (e) => {
                         const card = e.target.closest('.item-card');
                         const hopeField = card.querySelector('.hope-field');
                         if (e.target.value === '不備・破損') {
-                            hopeField.style.display = 'flex';
+                            hopeField.style.display = 'block';
                         } else {
                             hopeField.style.display = 'none';
                             card.querySelector('.jigo-select').value = '';
@@ -147,35 +143,56 @@
                 itemListEl.innerHTML = `<p class="text-red-500 text-center bg-white p-4 rounded-lg shadow">エラー: ${error.message}</p>`;
             }
 
-            // 5. ボタンが押されたらCSVを作成してダウンロード
-            submitButton.addEventListener('click', () => {
-                let csvContent = "data:text/csv;charset=utf-8,";
-                csvContent += "ID,品名,場所コード,現物,状態,事後対応,点検日時\r\n"; // ヘッダー
+            // ボタンが押されたらデータをGoogle Apps Scriptに送信
+            submitButton.addEventListener('click', async () => {
+                if(apiUrl.startsWith("【")){
+                    alert("エラー: Google Apps ScriptのURLが設定されていません。");
+                    return;
+                }
 
-                const now = new Date().toLocaleString('ja-JP');
+                submitButton.disabled = true;
+                statusMessageEl.textContent = "送信中...";
+                statusMessageEl.className = "text-center mt-2 text-sm text-blue-600";
 
+                const results = [];
                 document.querySelectorAll('.item-card').forEach(card => {
-                    const id = card.dataset.id;
-                    const name = card.dataset.name;
-                    const loc_code = card.dataset.location_code;
-                    const genbutsu = card.querySelector('.genbutsu-select').value;
-                    const joutai = card.querySelector('.joutai-select').value;
-                    const jigo = card.querySelector('.jigo-select').value;
-                    
-                    const row = [id, name, loc_code, genbutsu, joutai, jigo, now].join(',');
-                    csvContent += row + "\r\n";
+                    results.push({
+                        id: card.dataset.id,
+                        name: card.dataset.name,
+                        location_code: card.dataset.location_code,
+                        genbutsu: card.querySelector('.genbutsu-select').value,
+                        joutai: card.querySelector('.joutai-select').value,
+                        jigo: card.querySelector('.jigo-select').value
+                    });
                 });
 
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                const fileName = `点検結果_${locationCode}_${new Date().toISOString().slice(0,10)}.csv`;
-                link.setAttribute("download", fileName);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                try {
+                    // bodyの中身を文字列に変換する
+                    const postData = JSON.stringify({ data: results });
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        mode: 'no-cors', // CORSエラーを回避
+                        headers: {
+                          'Content-Type': 'text/plain;charset=utf-8', // Apps ScriptのdoPostで正しく受け取るため
+                        },
+                        body: postData,
+                    });
+                    
+                    // no-corsモードではレスポンスの中身を確認できないため、成功したと仮定する
+                    statusMessageEl.textContent = "送信が完了しました！";
+                    statusMessageEl.className = "text-center mt-2 text-sm text-green-600";
+                    submitButton.style.backgroundColor = 'rgb(34 197 94)';
+
+                } catch (error) {
+                    console.error('送信エラー:', error);
+                    statusMessageEl.textContent = `送信に失敗しました。(${error.message})`;
+                    statusMessageEl.className = "text-center mt-2 text-sm text-red-600";
+                    submitButton.disabled = false;
+                }
             });
         });
     </script>
 </body>
 </html>
+
