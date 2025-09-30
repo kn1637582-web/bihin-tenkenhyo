@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>備品点検</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: sans-serif; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="container mx-auto max-w-lg p-4">
+        <header class="bg-white p-4 rounded-lg shadow-md mb-4">
+            <h1 class="text-2xl font-bold text-gray-800">備品点検</h1>
+            <p id="location-name" class="text-lg text-gray-600 font-semibold mt-2">場所: 読み込み中...</p>
+        </header>
+
+        <main id="item-list" class="space-y-3">
+            <div id="loader" class="flex justify-center items-center p-8 bg-white rounded-lg shadow">
+                <div class="loader"></div>
+                <p class="ml-4 text-gray-600">備品データを読み込んでいます...</p>
+            </div>
+        </main>
+
+        <footer class="mt-6">
+            <button id="submit-button" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition duration-300 ease-in-out disabled:bg-gray-400" disabled>
+                点検結果をCSVでダウンロード
+            </button>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const locationNameEl = document.getElementById('location-name');
+            const itemListEl = document.getElementById('item-list');
+            const loaderEl = document.getElementById('loader');
+            const submitButton = document.getElementById('submit-button');
+
+            // 1. URLから場所コードを取得
+            const params = new URLSearchParams(window.location.search);
+            const locationCode = params.get('location');
+
+            if (!locationCode) {
+                itemListEl.innerHTML = '<p class="text-red-500 text-center bg-white p-4 rounded-lg shadow">エラー: URLに場所コードが指定されていません。</p>';
+                return;
+            }
+
+            try {
+                // 2. Webサーバーに置いた備品データを読み込む
+                const response = await fetch('data.json');
+                if (!response.ok) throw new Error('データファイルの読み込みに失敗しました。');
+                const allItems = await response.json();
+                
+                // 3. この場所の備品だけを絞り込む
+                const locationItems = allItems.filter(item => String(item.場所コード) === String(locationCode));
+
+                if (locationItems.length === 0) {
+                    locationNameEl.textContent = `場所コード: ${locationCode} (該当なし)`;
+                    itemListEl.innerHTML = '<p class="text-center bg-white p-4 rounded-lg shadow">この場所には備品が登録されていません。</p>';
+                    loaderEl.style.display = 'none';
+                    return;
+                }
+                
+                // 場所名を表示 (最初の備品の場所名を利用)
+                locationNameEl.textContent = `場所: ${locationItems[0].場所 || `コード ${locationCode}`}`;
+                
+                // 4. 備品リストを画面に表示する
+                itemListEl.innerHTML = ''; // ローダーを消す
+                locationItems.forEach(item => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'bg-white p-4 rounded-lg shadow-md item-card';
+                    itemDiv.dataset.id = item.ID;
+                    itemDiv.dataset.name = item.品名;
+                    itemDiv.dataset.location_code = item.場所コード;
+
+                    itemDiv.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-lg">${item.品名 || '名称未設定'}</h3>
+                                <p class="text-sm text-gray-500">ID: ${item.ID}</p>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <label class="flex items-center space-x-1">
+                                    <span class="text-gray-700">現物:</span>
+                                    <select class="rounded border-gray-300 shadow-sm genbutsu-select">
+                                        <option value="有">有</option>
+                                        <option value="無">無</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mt-3 space-y-2">
+                             <div class="flex items-center space-x-3">
+                                <label class="flex items-center space-x-1">
+                                    <span class="text-gray-700">状態:</span>
+                                    <select class="rounded border-gray-300 shadow-sm joutai-select">
+                                        <option value="正常">正常</option>
+                                        <option value="不備・破損">不備・破損</option>
+                                    </select>
+                                </label>
+                                <label class="flex items-center space-x-1 hope-field" style="display: none;">
+                                    <span class="text-gray-700">事後対応:</span>
+                                    <select class="rounded border-gray-300 shadow-sm jigo-select">
+                                        <option value=""></option>
+                                        <option value="修繕希望">修繕希望</option>
+                                        <option value="廃棄希望">廃棄希望</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                    `;
+                    itemListEl.appendChild(itemDiv);
+                });
+
+                // 状態が「不備・破損」の時だけ事後対応欄を表示する
+                itemListEl.querySelectorAll('.joutai-select').forEach(select => {
+                    select.addEventListener('change', (e) => {
+                        const card = e.target.closest('.item-card');
+                        const hopeField = card.querySelector('.hope-field');
+                        if (e.target.value === '不備・破損') {
+                            hopeField.style.display = 'flex';
+                        } else {
+                            hopeField.style.display = 'none';
+                            card.querySelector('.jigo-select').value = '';
+                        }
+                    });
+                });
+
+                submitButton.disabled = false;
+
+            } catch (error) {
+                console.error('Error:', error);
+                itemListEl.innerHTML = `<p class="text-red-500 text-center bg-white p-4 rounded-lg shadow">エラー: ${error.message}</p>`;
+            }
+
+            // 5. ボタンが押されたらCSVを作成してダウンロード
+            submitButton.addEventListener('click', () => {
+                let csvContent = "data:text/csv;charset=utf-8,";
+                csvContent += "ID,品名,場所コード,現物,状態,事後対応,点検日時\r\n"; // ヘッダー
+
+                const now = new Date().toLocaleString('ja-JP');
+
+                document.querySelectorAll('.item-card').forEach(card => {
+                    const id = card.dataset.id;
+                    const name = card.dataset.name;
+                    const loc_code = card.dataset.location_code;
+                    const genbutsu = card.querySelector('.genbutsu-select').value;
+                    const joutai = card.querySelector('.joutai-select').value;
+                    const jigo = card.querySelector('.jigo-select').value;
+                    
+                    const row = [id, name, loc_code, genbutsu, joutai, jigo, now].join(',');
+                    csvContent += row + "\r\n";
+                });
+
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                const fileName = `点検結果_${locationCode}_${new Date().toISOString().slice(0,10)}.csv`;
+                link.setAttribute("download", fileName);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+        });
+    </script>
+</body>
+</html>
